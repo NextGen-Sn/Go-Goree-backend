@@ -35,4 +35,24 @@ return [
         ],
     ],
 
+
+    'paydunya' => [
+        'mode' => env('PAYDUNYA_MODE', 'fake'),
+        'master_key' => env('PAYDUNYA_MASTER_KEY'),
+        'private_key' => env('PAYDUNYA_PRIVATE_KEY'),
+        'public_key' => env('PAYDUNYA_PUBLIC_KEY'),
+        'token' => env('PAYDUNYA_TOKEN'),
+        'base_url' => env('PAYDUNYA_BASE_URL', 'https://app.paydunya.com/api/v1'),
+        'environment' => env('PAYDUNYA_ENVIRONMENT', 'test'),
+        'webhook_secret' => env('PAYDUNYA_WEBHOOK_SECRET'),
+        'webhook_url' => env('PAYDUNYA_WEBHOOK_URL'),
+        'return_url' => env('PAYDUNYA_RETURN_URL'),
+        'cancel_url' => env('PAYDUNYA_CANCEL_URL'),
+    ],
+
+    'fraude' => [
+        'velocite_max_tentatives' => env('FRAUDE_VELOCITE_MAX_TENTATIVES', 5),
+        'velocite_fenetre_minutes' => env('FRAUDE_VELOCITE_FENETRE_MINUTES', 10),
+        'alerte_critique_mail_immediat' => env('FRAUDE_ALERTE_CRITIQUE_MAIL_IMMEDIAT', true),
+    ],
 ];
