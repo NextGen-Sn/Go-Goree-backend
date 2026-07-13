@@ -120,3 +120,26 @@ test('un utilisateur peut être supprimé (soft delete)', function () {
 
     $this->assertSoftDeleted('users', ['id' => $user->id]);
 });
+
+test('le mot de passe est haché : un compte créé via l\'API peut se connecter (S4 corrigé)', function () {
+    $role = Role::factory()->client()->create();
+    Sanctum::actingAs(User::factory()->admin()->create());
+
+    $this->postJson('/api/v1/users', [
+        'prenom' => 'Fatou',
+        'nom' => 'Sow',
+        'email' => 'fatou.sow@goree.sn',
+        'mot_de_passe' => 'MonMotDePasse1',
+        'role_id' => $role->id,
+    ])->assertCreated();
+
+    // Le mot de passe n'est pas stocké en clair.
+    expect(User::where('email', 'fatou.sow@goree.sn')->first()->mot_de_passe)
+        ->not->toBe('MonMotDePasse1');
+
+    // Et la connexion fonctionne (Hash::check réussit).
+    $this->postJson('/api/v1/login', [
+        'email' => 'fatou.sow@goree.sn',
+        'mot_de_passe' => 'MonMotDePasse1',
+    ])->assertOk()->assertJsonStructure(['access_token']);
+});

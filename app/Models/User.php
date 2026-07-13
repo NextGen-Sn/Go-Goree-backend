@@ -51,6 +51,9 @@ class User extends Authenticatable
             'active' => 'boolean',
             'est_resident' => 'boolean',
             'password_reset_at' => 'datetime',
+            // Hache automatiquement le mot de passe à l'écriture (ne re-hache pas
+            // une valeur déjà hachée). Corrige le stockage en clair et le login.
+            'mot_de_passe' => 'hashed',
         ];
     }
 

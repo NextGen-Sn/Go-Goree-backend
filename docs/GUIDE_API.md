@@ -244,13 +244,14 @@ Le solde n'est crédité qu'**après confirmation par le webhook** (jamais direc
 
 | Domaine | Endpoint | Notes |
 |---|---|---|
-| Notifications | `GET /notifications`, `PUT /notifications/{id}`, `DELETE /notifications/{id}` | l'utilisateur ne voit que les siennes (liste) |
-| Alertes fraude | `GET /alertes-fraude`, `GET/PUT /alertes-fraude/{id}` | consultation/traitement admin |
-| Voyages | `GET/POST/PUT/DELETE /voyages` | date `after_or_equal:today` |
-| Trajets | `GET/POST/PUT/DELETE /trajets` | `jour`, `heure_depart` (H:i), `duree` |
-| Tarifs | `GET/POST/PUT/DELETE /tarifs` | `categorie`, `prix` |
-| Utilisateurs | `GET/POST/PUT/DELETE /users` | CRUD |
-| Résidents / Abonnements | `/residents`, `/abonnements` | CRUD |
+| Notifications | `GET /notifications`, `PUT /notifications/{id}`, `DELETE /notifications/{id}` | l'utilisateur n'accède qu'aux siennes (404 sinon) |
+| Alertes fraude | `GET /alertes-fraude`, `GET/PUT /alertes-fraude/{id}` | **Admin uniquement** |
+| Voyages | lecture `GET` (tous) · écriture `POST/PUT/DELETE` (**Admin**) | date `after_or_equal:today` |
+| Trajets | lecture `GET` (tous) · écriture (**Admin**) | `jour`, `heure_depart` (H:i), `duree` |
+| Chaloupes | lecture `GET` (tous) · écriture (**Admin**) | `imatriculation` (requise), `nom`, `capacite` |
+| Tarifs | lecture `GET` (tous) · écriture (**Admin**) | `categorie`, `prix` |
+| Utilisateurs | `GET/POST/PUT/DELETE /users` | **Admin uniquement** |
+| Résidents / Abonnements | `/residents`, `/abonnements` | **Admin uniquement** |
 
 ---
 
@@ -285,19 +286,20 @@ Réponses : `200` (`accepte` / `deja_traite`), `401` (signature invalide), `404`
 
 | Méthode | URL | Auth | Rôle |
 |---|---|---|---|
-| POST | `/api/v1/login` | — | — |
-| POST | `/api/v1/password/forgot` · `/password/reset` | — | — |
+| POST | `/api/v1/login` *(throttle 6/min)* | — | — |
+| POST | `/api/v1/password/forgot` · `/password/reset` *(throttle)* | — | — |
 | GET | `/api/v1/me` · POST `/logout` | ✅ | tous |
-| POST | `/api/v1/controleurs` | ✅ | **Admin** |
-| GET | `/api/v1/controleurs` | ✅ | tous* |
-| CRUD | `/api/v1/users` | ✅ | tous* |
-| POST | `/api/v1/demandes-residence` | ✅ | client |
+| GET/POST | `/api/v1/controleurs` | ✅ | **Admin** |
+| CRUD | `/api/v1/users` | ✅ | **Admin** |
+| GET/POST | `/api/v1/demandes-residence` | ✅ | tous (lecture filtrée) |
 | POST | `/api/v1/demandes-residence/{id}/valider` · `/refuser` | ✅ | **Admin** |
-| CRUD | `/api/v1/voyages` `/trajets` `/chaloupes` `/tarifs` | ✅ | tous* |
-| POST/GET | `/api/v1/billets` | ✅ | client |
-| POST | `/api/v1/scans` | ✅ | agent |
-| GET | `/api/v1/portefeuille` · POST `/portefeuille/recharge` | ✅ | client |
-| GET | `/api/v1/notifications` · `/alertes-fraude` | ✅ | tous* |
+| GET | `/api/v1/voyages` `/trajets` `/chaloupes` `/tarifs` | ✅ | tous |
+| POST/PUT/DELETE | `/api/v1/voyages` `/trajets` `/chaloupes` `/tarifs` | ✅ | **Admin** |
+| POST/GET | `/api/v1/billets` | ✅ | tous (liste filtrée) |
+| POST | `/api/v1/scans` | ✅ | **Agent / Admin** |
+| GET | `/api/v1/portefeuille` · POST `/portefeuille/recharge` | ✅ | tous |
+| GET | `/api/v1/notifications` | ✅ | tous (les siennes) |
+| CRUD | `/api/v1/alertes-fraude` · `/residents` · `/abonnements` · `/payements` | ✅ | **Admin** |
 | POST | `/webhooks/paydunya` | signé | PayDunya |
 
-> \* **Note sécurité** : à ce stade, la plupart des routes ne vérifient que « authentifié », pas le rôle (voir le rapport d'analyse — failles S2/S3 à corriger). Seuls `POST /controleurs` et la validation de résidence sont réservés à l'Admin.
+> **Sécurité** : le contrôle d'accès par rôle est appliqué via le middleware `role:` (ex. `role:Admin`, `role:Admin,Agent`). Un rôle insuffisant renvoie `403`. Les routes non authentifiées renvoient `401`.

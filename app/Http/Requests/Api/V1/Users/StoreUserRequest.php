@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Api\V1\Users;
 
+use App\Enums\RoleEnum;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
@@ -10,11 +11,11 @@ use Illuminate\Foundation\Http\FormRequest;
 class StoreUserRequest extends FormRequest
 {
     /**
-     * Déterminer si l'utilisateur est autorisé à effectuer cette requête.
+     * Seul un administrateur peut créer un utilisateur (et donc lui assigner un rôle).
      */
     public function authorize(): bool
     {
-        return true;
+        return $this->user()?->role?->nom === RoleEnum::ADMIN;
     }
 
     /**

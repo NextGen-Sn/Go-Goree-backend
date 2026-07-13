@@ -43,14 +43,16 @@ test('les notifications sont protégées par authentification', function () {
     $this->getJson('/api/v1/notifications')->assertUnauthorized();
 });
 
-test('FAILLE connue (IDOR) : un utilisateur peut accéder à la notification d\'un autre', function () {
-    // Le contrôleur ne vérifie pas la propriété dans show/update/destroy.
-    // Ce test documente la faille signalée (S5). Il devra être inversé
-    // (assertForbidden) une fois le contrôle de propriété ajouté.
+test('un utilisateur ne peut pas accéder à la notification d\'un autre (S5 corrigé)', function () {
     $autre = Notification::factory()->create();
-    Sanctum::actingAs(User::factory()->create());
+    $user = User::factory()->create();
+    Sanctum::actingAs($user);
 
-    $this->getJson("/api/v1/notifications/{$autre->id}")
-        ->assertOk()
-        ->assertJsonPath('id', $autre->id);
+    // 404 (et non 403) pour ne pas divulguer l'existence de la ressource.
+    $this->getJson("/api/v1/notifications/{$autre->id}")->assertNotFound();
+    $this->putJson("/api/v1/notifications/{$autre->id}")->assertNotFound();
+    $this->deleteJson("/api/v1/notifications/{$autre->id}")->assertNotFound();
+
+    // La notification de l'autre n'a pas été modifiée/supprimée.
+    $this->assertDatabaseHas('notifications', ['id' => $autre->id, 'lu_a' => null]);
 });
