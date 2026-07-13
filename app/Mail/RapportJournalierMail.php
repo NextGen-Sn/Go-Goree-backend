@@ -3,6 +3,7 @@
 namespace App\Mail;
 
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
@@ -11,15 +12,20 @@ use Illuminate\Queue\SerializesModels;
 /**
  * Classe de mail envoyée pour transmettre le rapport d'activité quotidien aux administrateurs.
  */
-class RapportJournalierMail extends Mailable
+class RapportJournalierMail extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
+
+    public $tries = 3;
+
+    public $backoff = 30;
 
     /**
      * Créer une nouvelle instance de mail de rapport journalier.
      */
     public function __construct(public array $donnees)
     {
+        $this->onQueue('rapports');
     }
 
     /**
