@@ -3,6 +3,7 @@
 use App\Events\RapportJournalierGenere;
 use App\Jobs\CheckExpiringAbonnementsJob;
 use App\Jobs\ExpireTicketsJob;
+use App\Jobs\GenererVoyagesSemaineJob;
 use App\Services\Rapports\RapportJournalierService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -22,3 +23,6 @@ Schedule::job(new ExpireTicketsJob)->everyMinute()->name('expiration-billets');
 
 // Vérification quotidienne des abonnements expirant bientôt (dans 3 jours)
 Schedule::job(new CheckExpiringAbonnementsJob)->dailyAt('08:00')->name('verification-expiration-abonnements');
+
+// Génération chaque soir des voyages des 7 prochains jours (liste toujours à jour).
+Schedule::job(new GenererVoyagesSemaineJob)->dailyAt('22:00')->name('generation-voyages-semaine');

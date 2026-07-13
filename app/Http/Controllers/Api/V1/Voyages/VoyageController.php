@@ -7,19 +7,44 @@ use App\Http\Requests\Api\V1\Voyages\StoreVoyageRequest;
 use App\Http\Requests\Api\V1\Voyages\UpdateVoyageRequest;
 use App\Http\Resources\Api\V1\VoyageResource;
 use App\Models\Voyage;
+use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 /**
- * Contrôleur pour gérer les instances de voyage d'une chaloupe (CRUD administratif).
+ * Contrôleur pour gérer les instances de voyage d'une chaloupe.
  */
 class VoyageController extends Controller
 {
     /**
-     * Liste des voyages programmés.
+     * Liste des voyages, avec filtres :
+     *   ?periode=today      → uniquement aujourd'hui
+     *   ?periode=semaine    → 7 prochains jours (défaut : voyages à venir)
+     *   ?date=YYYY-MM-DD    → une date précise
+     *   ?disponibles=true   → uniquement ceux avec des places restantes
      */
-    public function index()
+    public function index(Request $request)
     {
-        return VoyageResource::collection(Voyage::with(['trajet', 'chaloupe'])->paginate());
+        $query = Voyage::with(['trajet', 'chaloupe'])
+            ->orderBy('date_voyage');
+
+        $today = now()->toDateString();
+
+        if ($request->filled('date')) {
+            $query->whereDate('date_voyage', $request->date);
+        } elseif ($request->periode === 'today') {
+            $query->whereDate('date_voyage', $today);
+        } elseif ($request->periode === 'semaine') {
+            $query->whereBetween('date_voyage', [$today, now()->addDays(6)->toDateString()]);
+        } else {
+            // Par défaut : les voyages à venir (aujourd'hui et après).
+            $query->whereDate('date_voyage', '>=', $today);
+        }
+
+        if ($request->boolean('disponibles')) {
+            $query->where('places_restantes', '>', 0);
+        }
+
+        return VoyageResource::collection($query->paginate());
     }
 
     /**
