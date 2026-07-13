@@ -95,14 +95,11 @@ test('flux complet de l\'application : authentification, résidence, recharge, a
         'statut' => DemandeResidenceEnum::ACCEPTEE->value,
     ]);
 
-    // Vérifier que l'écouteur d'événement a bien activé le résident et créé son abonnement de 12 mois
+    // Vérifier que l'écouteur d'événement a bien activé le statut résident.
+    // (L'abonnement n'est plus créé automatiquement : il se souscrit/paie séparément.)
     $resident = Resident::where('user_id', $client->id)->first();
     $this->assertNotNull($resident);
     $this->assertTrue((bool) $resident->active);
-
-    $this->assertDatabaseHas('abonnements', [
-        'resident_id' => $resident->id,
-    ]);
 
     // -------------------------------------------------------------
     // ÉTAPE 4 : Recharge du portefeuille (Client)
