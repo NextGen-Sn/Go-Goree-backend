@@ -6,11 +6,18 @@ use App\Http\Controllers\Api\V1\Residents\ResidentController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth:sanctum')->group(function () {
-    Route::apiResource('residents', ResidentController::class);
+    // Un client peut soumettre et consulter (la liste/détail est filtrée dans le contrôleur).
+    Route::apiResource('demandes-residence', DemandeResidenceController::class)
+        ->only(['index', 'store', 'show']);
 
-    Route::post('demandes-residence/{id}/valider', [DemandeResidenceController::class, 'valider']);
-    Route::post('demandes-residence/{id}/refuser', [DemandeResidenceController::class, 'refuser']);
-    Route::apiResource('demandes-residence', DemandeResidenceController::class);
+    // Actions administratives.
+    Route::middleware('role:Admin')->group(function () {
+        Route::post('demandes-residence/{id}/valider', [DemandeResidenceController::class, 'valider']);
+        Route::post('demandes-residence/{id}/refuser', [DemandeResidenceController::class, 'refuser']);
+        Route::apiResource('demandes-residence', DemandeResidenceController::class)
+            ->only(['update', 'destroy']);
 
-    Route::apiResource('abonnements', AbonnementController::class);
+        Route::apiResource('residents', ResidentController::class);
+        Route::apiResource('abonnements', AbonnementController::class);
+    });
 });

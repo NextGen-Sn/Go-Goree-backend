@@ -89,21 +89,25 @@ test('un trajet peut être créé', function () {
     ])->assertCreated();
 });
 
-test('BUG connu : la création de chaloupe échoue car imatriculation est ignorée', function () {
-    // StoreChaloupeRequest ne déclare pas de règle pour « imatriculation », donc
-    // $request->validated() la supprime, alors que la colonne est NOT NULL/unique.
-    // => l'insertion échoue. Ce test documente le bug ; il faudra l'ajuster
-    //    lorsque la règle sera ajoutée à StoreChaloupeRequest.
+test('une chaloupe peut être créée avec son immatriculation', function () {
     Sanctum::actingAs(User::factory()->admin()->create());
 
-    $response = $this->postJson('/api/v1/chaloupes', [
+    $this->postJson('/api/v1/chaloupes', [
         'imatriculation' => 'IM-TEST-01',
         'nom' => 'Beer',
         'capacite' => 150,
-    ]);
+    ])->assertCreated();
 
-    expect($response->status())->toBeGreaterThanOrEqual(500);
-    $this->assertDatabaseCount('chaloupes', 0);
+    $this->assertDatabaseHas('chaloupes', ['imatriculation' => 'IM-TEST-01', 'nom' => 'Beer']);
+});
+
+test('la création de chaloupe exige une immatriculation', function () {
+    Sanctum::actingAs(User::factory()->admin()->create());
+
+    $this->postJson('/api/v1/chaloupes', [
+        'nom' => 'Beer',
+        'capacite' => 150,
+    ])->assertStatus(422)->assertJsonValidationErrors(['imatriculation']);
 });
 
 test('un tarif peut être créé', function () {
