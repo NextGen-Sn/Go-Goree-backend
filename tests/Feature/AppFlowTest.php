@@ -178,12 +178,17 @@ test('flux complet de l\'application : authentification, résidence, recharge, a
     ]);
 
     // -------------------------------------------------------------
-    // ÉTAPE 6 : Scan du Billet lors de l'embarquement
+    // ÉTAPE 6 : Ouverture de l'embarcation puis scan du billet
     // -------------------------------------------------------------
     Sanctum::actingAs($admin);
 
+    $embarquementId = $this->postJson('/api/v1/embarquements/ouvrir', [
+        'voyage_id' => $voyage->id,
+    ])->assertOk()->json('id');
+
     $scanResponse = $this->postJson('/api/v1/scans', [
         'qr_token' => $qrToken,
+        'embarquement_id' => $embarquementId,
     ]);
 
     $scanResponse->assertStatus(200)

@@ -15,6 +15,8 @@ class Scan extends Model
     protected $fillable = [
         'resultat',
         'billet_id',
+        'embarquement_id',
+        'scanne_par',
     ];
 
     protected function casts(): array
@@ -27,5 +29,10 @@ class Scan extends Model
     public function billet()
     {
         return $this->belongsTo(Billet::class);
+    }
+
+    public function embarquement()
+    {
+        return $this->belongsTo(Embarquement::class);
     }
 }
