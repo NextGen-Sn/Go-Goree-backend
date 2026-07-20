@@ -60,18 +60,21 @@ class BilletPurchaseService
 
     public function purchase(User $user, string $voyageId, ModePayementEnum $paymentMode, ?CategorieEnum $requestedCategory = null): array
     {
-        // Anti-doublon — pré-vérification (rapide, bonne UX). La garantie stricte
-        // contre les achats concurrents est assurée par l'index unique en base,
-        // capturé ci-dessous.
-        if ($this->possedeDejaUnBillet($user->id, $voyageId)) {
+        $estAbonne = $this->abonnementChecker->check($user);
+
+        // Anti-fraude : un résident abonné ne peut générer qu'UN seul billet
+        // GRATUIT par voyage (pré-vérification rapide ; la garantie stricte
+        // contre les achats concurrents est l'index unique partiel en base).
+        // Un client payant n'est pas concerné : il peut acheter plusieurs
+        // billets pour un même voyage (ex. pour ses enfants).
+        if ($estAbonne && $this->possedeDejaUnBillet($user->id, $voyageId)) {
             $this->signalerDoubleBillet($user, $voyageId);
 
             throw new \RuntimeException('Vous avez déjà un billet pour ce voyage.');
         }
 
         try {
-            return DB::transaction(function () use ($user, $voyageId, $paymentMode, $requestedCategory) {
-                $estAbonne = $this->abonnementChecker->check($user);
+            return DB::transaction(function () use ($user, $voyageId, $paymentMode, $requestedCategory, $estAbonne) {
                 $tarif = $this->resoudreTarif($user, $requestedCategory, $estAbonne);
 
                 if (! $this->placeReservation->reserve($voyageId, 1)) {

@@ -95,6 +95,11 @@ class AuthController extends Controller
      */
     public function me(Request $request)
     {
-        return new UserResource($request->user()->load('role'));
+        // Charge le rôle + le résident et ses abonnements (avec plan) afin que
+        // UserResource puisse exposer le statut résident et l'abonnement actif,
+        // sans requête supplémentaire (indispensable au parcours billet gratuit).
+        return new UserResource(
+            $request->user()->load(['role', 'resident.abonnements.plan'])
+        );
     }
 }

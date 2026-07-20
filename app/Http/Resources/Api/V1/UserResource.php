@@ -33,6 +33,28 @@ class UserResource extends JsonResource
             'portefeuille' => $this->relationLoaded('portefeuille') && $this->portefeuille ? [
                 'solde' => $this->portefeuille->solde,
             ] : null,
+            'est_resident' => (bool) $this->est_resident,
+            // Abonnement actif (résident) : présent uniquement si la relation
+            // resident.abonnements est chargée (endpoint /me). L'abonnement est
+            // « actif » tant que sa date_fin est dans le futur.
+            'abonnement' => $this->when(
+                $this->relationLoaded('resident'),
+                function () {
+                    $actif = $this->resident
+                        ? $this->resident->abonnements
+                            ->first(fn ($a) => $a->date_fin && $a->date_fin->isFuture())
+                        : null;
+
+                    return [
+                        'actif' => (bool) $actif,
+                        'date_fin' => $actif?->date_fin?->toIso8601String(),
+                        'plan' => $actif && $actif->plan ? [
+                            'nom' => $actif->plan->nom,
+                            'duree_mois' => $actif->plan->duree_mois,
+                        ] : null,
+                    ];
+                }
+            ),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

@@ -109,7 +109,7 @@ class DatabaseSeeder extends Seeder
             CategorieEnum::ENFANT->value => 500,
             CategorieEnum::ADULTE->value => 1500,
             CategorieEnum::RESIDENT->value => 500,
-            CategorieEnum::ETRANGER->value => 2500,
+            CategorieEnum::ETRANGER->value => 5000,
         ];
         $tarifModels = [];
         foreach ($tarifs as $categorie => $prix) {
