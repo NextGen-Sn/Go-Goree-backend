@@ -28,12 +28,17 @@ class PasswordResetController extends Controller
         $user = User::where('email', $request->email)->first();
 
         if ($user) {
-            $token = $this->passwordReset->genererToken($user);
-            Mail::to($user->email)->queue(new ReinitialisationMotDePasseMail($user, $token));
+            $code = $this->passwordReset->genererCode($user);
+            // Envoi asynchrone (file Redis) : la réponse HTTP reste rapide,
+            // l'envoi SMTP est traité en arrière-plan par le worker
+            // (php artisan queue:work). Redis + worker doivent tourner.
+            Mail::to($user->email)->queue(
+                new ReinitialisationMotDePasseMail($user, $code, invitation: false, code: true)
+            );
         }
 
         return response()->json([
-            'message' => 'Si un compte existe pour cet email, un lien de réinitialisation a été envoyé.',
+            'message' => 'Si un compte existe pour cet email, un code de réinitialisation a été envoyé.',
         ]);
     }
 

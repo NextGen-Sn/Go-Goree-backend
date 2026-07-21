@@ -42,6 +42,28 @@ class PasswordResetService
     }
 
     /**
+     * Créer (ou remplacer) un code à 6 chiffres de réinitialisation pour un
+     * utilisateur et renvoyer le code EN CLAIR (à envoyer par email). Utilisé
+     * par le « mot de passe oublié » côté mobile ; comme genererToken, seule la
+     * version hachée est persistée, et reinitialiser() valide indifféremment un
+     * jeton long (invitation) ou un code court (reset).
+     */
+    public function genererCode(User $user): string
+    {
+        $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+        DB::table($this->table)->updateOrInsert(
+            ['email' => $user->email],
+            [
+                'token' => hash('sha256', $code),
+                'created_at' => now(),
+            ]
+        );
+
+        return $code;
+    }
+
+    /**
      * Définir le mot de passe d'un utilisateur à partir d'un jeton valide.
      *
      * @throws ValidationException si le couple email/jeton est invalide ou expiré.

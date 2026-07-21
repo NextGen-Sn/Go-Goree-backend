@@ -36,6 +36,9 @@ class ReinitialisationMotDePasseMail extends Mailable implements ShouldQueue
         public User $user,
         public string $token,
         public bool $invitation = false,
+        // true => le jeton est un code à 6 chiffres (mot de passe oublié mobile),
+        // affiché tel quel dans l'email au lieu d'un lien.
+        public bool $code = false,
     ) {
         // File d'attente dédiée aux notifications transactionnelles.
         $this->onQueue('notifications');
@@ -62,6 +65,7 @@ class ReinitialisationMotDePasseMail extends Mailable implements ShouldQueue
                 'lien' => $lien,
                 'token' => $this->token,
                 'invitation' => $this->invitation,
+                'code' => $this->code,
                 'prenom' => $this->user->prenom,
                 'expireMinutes' => (int) config('auth.passwords.users.expire', 60),
             ],
