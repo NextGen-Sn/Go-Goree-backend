@@ -31,11 +31,13 @@ use Illuminate\Support\Facades\DB;
  * Orchestration de la génération/achat d'un billet.
  *
  * Règles métier :
- *  - Un seul billet actif par (client, voyage) : toute tentative en double
- *    déclenche une alerte de fraude et est refusée.
  *  - Résident avec abonnement actif : le billet est GÉNÉRÉ gratuitement
  *    (aucun paiement) — l'abonnement couvre le trajet.
- *  - Sinon : achat normal (tarif réduit résident si applicable, sinon plein tarif).
+ *  - Un seul billet GRATUIT actif par (client, voyage) : toute tentative en
+ *    double déclenche une alerte de fraude et est refusée.
+ *  - Sinon : achat normal (tarif réduit résident si applicable, sinon plein
+ *    tarif). Plusieurs billets payants pour un même voyage sont autorisés
+ *    (ex. un parent qui achète pour ses enfants).
  */
 class BilletPurchaseService
 {
@@ -67,7 +69,7 @@ class BilletPurchaseService
         // contre les achats concurrents est l'index unique partiel en base).
         // Un client payant n'est pas concerné : il peut acheter plusieurs
         // billets pour un même voyage (ex. pour ses enfants).
-        if ($estAbonne && $this->possedeDejaUnBillet($user->id, $voyageId)) {
+        if ($estAbonne && $this->possedeDejaUnBilletGratuit($user->id, $voyageId)) {
             $this->signalerDoubleBillet($user, $voyageId);
 
             throw new \RuntimeException('Vous avez déjà un billet pour ce voyage.');
@@ -149,12 +151,18 @@ class BilletPurchaseService
     }
 
     /**
-     * L'utilisateur a-t-il déjà un billet actif pour ce voyage ?
+     * L'utilisateur a-t-il déjà un billet GRATUIT actif pour ce voyage ?
+     *
+     * Le filtre sur `montant = 0` reflète exactement l'index unique partiel en
+     * base (`billets_user_voyage_gratuit_unique`) : un billet payant déjà acheté
+     * pour ce voyage ne doit ni bloquer la génération du billet d'abonnement,
+     * ni déclencher une alerte de fraude.
      */
-    private function possedeDejaUnBillet(string $userId, string $voyageId): bool
+    private function possedeDejaUnBilletGratuit(string $userId, string $voyageId): bool
     {
         return Billet::where('user_id', $userId)
             ->where('voyage_id', $voyageId)
+            ->where('montant', 0)
             ->whereIn('statut', self::STATUTS_ACTIFS)
             ->exists();
     }

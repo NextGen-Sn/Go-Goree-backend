@@ -85,10 +85,13 @@ test('un résident SANS abonnement paie le tarif réduit résident', function ()
     expect((float) Portefeuille::where('user_id', $client->id)->first()->solde)->toBe(4500.0);
 });
 
-test('impossible de générer deux billets pour le même voyage (fraude signalée)', function () {
-    $client = User::factory()->client()->create();
+test('un résident abonné ne peut pas générer deux billets gratuits pour le même voyage (fraude signalée)', function () {
+    $client = User::factory()->client()->resident()->create();
+    $resident = Resident::factory()->create(['user_id' => $client->id, 'active' => true]);
+    Abonnement::factory()->actif()->create(['resident_id' => $resident->id]);
+    Tarif::factory()->resident(500)->create();
+    Tarif::factory()->adulte(1500)->create();
     Portefeuille::factory()->solde(10000)->create(['user_id' => $client->id]);
-    Tarif::factory()->etranger(2500)->create();
     $voyage = Voyage::factory()->placesRestantes(10)->create();
 
     Sanctum::actingAs($client);
@@ -100,21 +103,84 @@ test('impossible de générer deux billets pour le même voyage (fraude signalé
         ->assertStatus(400)
         ->assertJsonPath('message', 'Vous avez déjà un billet pour ce voyage.');
 
-    // Un seul billet, et une alerte de fraude a été enregistrée.
+    // Un seul billet gratuit, et une alerte de fraude a été enregistrée.
     expect(Billet::where('user_id', $client->id)->where('voyage_id', $voyage->id)->count())->toBe(1);
     $this->assertDatabaseHas('alerte_fraudes', ['regle_declenchee' => 'double_billet_voyage']);
 });
 
-test('la base garantit l\'unicité d\'un billet actif par (client, voyage) [anti-course]', function () {
+test('un résident abonné génère son billet gratuit même s\'il a déjà un billet payant pour ce voyage', function () {
+    $client = User::factory()->client()->resident()->create();
+    $resident = Resident::factory()->create(['user_id' => $client->id, 'active' => true]);
+    Abonnement::factory()->actif()->create(['resident_id' => $resident->id]);
+    Tarif::factory()->resident(500)->create();
+    Tarif::factory()->adulte(1500)->create();
+    Portefeuille::factory()->solde(5000)->create(['user_id' => $client->id]);
+    $voyage = Voyage::factory()->placesRestantes(10)->create();
+
+    // Billet payant acheté avant la souscription de l'abonnement : il ne doit ni
+    // bloquer la génération gratuite, ni déclencher une alerte de fraude.
+    Billet::factory()->paye()->create([
+        'user_id' => $client->id, 'voyage_id' => $voyage->id, 'montant' => 2500,
+    ]);
+
+    Sanctum::actingAs($client);
+
+    $this->postJson('/api/v1/billets', [
+        'voyage_id' => $voyage->id,
+        'payment_mode' => ModePayementEnum::PORTEFEUILLE->value,
+    ])->assertCreated();
+
+    expect(Billet::where('user_id', $client->id)->where('voyage_id', $voyage->id)->where('montant', 0)->count())->toBe(1);
+    expect((float) Portefeuille::where('user_id', $client->id)->first()->solde)->toBe(5000.0);
+    $this->assertDatabaseMissing('alerte_fraudes', ['regle_declenchee' => 'double_billet_voyage']);
+});
+
+test('un client payant peut acheter plusieurs billets pour le même voyage', function () {
+    $client = User::factory()->client()->create();
+    Portefeuille::factory()->solde(10000)->create(['user_id' => $client->id]);
+    Tarif::factory()->etranger(2500)->create();
+    $voyage = Voyage::factory()->placesRestantes(10)->create();
+
+    Sanctum::actingAs($client);
+
+    $payload = ['voyage_id' => $voyage->id, 'payment_mode' => ModePayementEnum::PORTEFEUILLE->value];
+
+    // Ex. un parent qui achète pour ses enfants : chaque billet est payé et
+    // réserve une place, aucune alerte de fraude n'est déclenchée.
+    $this->postJson('/api/v1/billets', $payload)->assertCreated();
+    $this->postJson('/api/v1/billets', $payload)->assertCreated();
+
+    expect(Billet::where('user_id', $client->id)->where('voyage_id', $voyage->id)->count())->toBe(2);
+    expect((float) Portefeuille::where('user_id', $client->id)->first()->solde)->toBe(5000.0);
+    expect($voyage->fresh()->places_restantes)->toBe(8);
+    $this->assertDatabaseMissing('alerte_fraudes', ['regle_declenchee' => 'double_billet_voyage']);
+});
+
+test('la base garantit l\'unicité d\'un billet GRATUIT actif par (client, voyage) [anti-course]', function () {
+    $client = User::factory()->client()->create();
+    $voyage = Voyage::factory()->create();
+    $tarif = Tarif::factory()->resident()->create();
+
+    $gratuit = ['user_id' => $client->id, 'voyage_id' => $voyage->id, 'tarif_id' => $tarif->id, 'montant' => 0];
+
+    Billet::factory()->paye()->create($gratuit);
+
+    expect(fn () => Billet::factory()->paye()->create($gratuit))
+        ->toThrow(UniqueConstraintViolationException::class);
+});
+
+test('la base autorise plusieurs billets PAYANTS actifs par (client, voyage)', function () {
     $client = User::factory()->client()->create();
     $voyage = Voyage::factory()->create();
     $tarif = Tarif::factory()->etranger()->create();
 
-    Billet::factory()->paye()->create(['user_id' => $client->id, 'voyage_id' => $voyage->id, 'tarif_id' => $tarif->id]);
+    $payant = ['user_id' => $client->id, 'voyage_id' => $voyage->id, 'tarif_id' => $tarif->id, 'montant' => 2500];
 
-    expect(fn () => Billet::factory()->paye()->create([
-        'user_id' => $client->id, 'voyage_id' => $voyage->id, 'tarif_id' => $tarif->id,
-    ]))->toThrow(UniqueConstraintViolationException::class);
+    // L'index unique partiel ne couvre que les billets à montant nul.
+    Billet::factory()->paye()->create($payant);
+    Billet::factory()->paye()->create($payant);
+
+    expect(Billet::where('user_id', $client->id)->where('voyage_id', $voyage->id)->count())->toBe(2);
 });
 
 test('l\'achat échoue si le solde du portefeuille est insuffisant', function () {
