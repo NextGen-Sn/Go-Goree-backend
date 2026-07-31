@@ -1,7 +1,7 @@
 # Go Gorée — Workflows métier
 
 Ce document décrit les parcours fonctionnels de l'application et leur état
-d'implémentation. **Tout est couvert par des tests automatisés (169 tests).**
+d'implémentation. **Tout est couvert par des tests automatisés (188 tests).**
 
 Voir aussi : [`GUIDE_API.md`](GUIDE_API.md) (guide pas-à-pas + curl) et la
 collection Postman dans [`postman/`](postman/).
@@ -48,8 +48,14 @@ collection Postman dans [`postman/`](postman/).
    - `PORTEFEUILLE` → débit immédiat, billet `PAYE`.
    - `PAYDUNYA` (ou Wave/Orange…) → `redirect_url` (lien de paiement) ; le billet
      passe `PAYE` à la **confirmation du webhook**.
-- **Anti-doublon** : un seul billet actif par (client, voyage). Une 2ᵉ tentative est
-  refusée **et génère une alerte de fraude**.
+- **Multi-billets** : un client payant peut acheter **plusieurs billets** pour un
+  même voyage (ex. un parent pour ses enfants) — chaque billet est payé et réserve
+  une place.
+- **Anti-doublon** : la règle ne vise que les billets **gratuits** (résident
+  abonné, `montant = 0`), pour empêcher la génération en masse de billets offerts.
+  Une 2ᵉ génération gratuite pour le même voyage est refusée **et génère une alerte
+  de fraude**. Garantie en base par l'index unique partiel
+  `billets_user_voyage_gratuit_unique`.
 
 🧪 `BilletPurchaseTest`, `PayDunyaRechargeTest`
 
@@ -187,7 +193,7 @@ Consultation/traitement : `GET/PUT /api/v1/alertes-fraude` (Admin).
 | 4. Notifications par email détaillé | ✅ | 🧪 |
 | 5. Souscription d'abonnement payante | ✅ | 🧪 |
 | 6. Résident sans abonnement = tarif réduit | ✅ | 🧪 |
-| 7. Anti-doublon de billet + fraude | ✅ | 🧪 |
+| 7. Anti-doublon de billet **gratuit** + fraude | ✅ | 🧪 |
 | 8. Génération gratuite si abonnement actif (table plans) | ✅ | 🧪 |
 | 9. Génération des voyages par cron | ✅ | 🧪 |
 | 10. Ouverture d'embarcation + scan par voyage | ✅ | 🧪 |
