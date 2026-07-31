@@ -25,6 +25,7 @@ class VoyageController extends Controller
     public function index(Request $request)
     {
         $query = Voyage::with(['trajet', 'chaloupe'])
+            ->withVentes()
             ->orderBy('date_voyage');
 
         $today = now()->toDateString();
@@ -69,7 +70,7 @@ class VoyageController extends Controller
      */
     public function show($id)
     {
-        $record = Voyage::with(['trajet', 'chaloupe'])->findOrFail($id);
+        $record = Voyage::with(['trajet', 'chaloupe'])->withVentes()->findOrFail($id);
 
         return new VoyageResource($record);
     }

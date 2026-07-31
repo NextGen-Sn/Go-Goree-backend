@@ -1,6 +1,8 @@
 <?php
 
 use App\Enums\CategorieEnum;
+use App\Enums\StatutBilletEnum;
+use App\Models\Billet;
 use App\Models\Chaloupe;
 use App\Models\Trajet;
 use App\Models\User;
@@ -126,4 +128,46 @@ test('un tarif peut être créé', function () {
 test('les routes voyages sont protégées par authentification', function () {
     $this->getJson('/api/v1/voyages')->assertUnauthorized();
     $this->getJson('/api/v1/tarifs')->assertUnauthorized();
+});
+
+test('la liste des voyages expose la recette réelle et le nombre de billets vendus', function () {
+    $voyage = Voyage::factory()->create();
+
+    // Deux billets encaissés, un billet gratuit d'abonné, et trois billets qui
+    // ne comptent pas : en attente de paiement, expiré, annulé.
+    Billet::factory()->paye()->create(['voyage_id' => $voyage->id, 'montant' => 2500]);
+    Billet::factory()->statut(StatutBilletEnum::UTILISE)->create(['voyage_id' => $voyage->id, 'montant' => 1500]);
+    Billet::factory()->paye()->create(['voyage_id' => $voyage->id, 'montant' => 0]);
+    Billet::factory()->enAttente()->create(['voyage_id' => $voyage->id, 'montant' => 2500]);
+    Billet::factory()->expire()->create(['voyage_id' => $voyage->id, 'montant' => 2500]);
+    Billet::factory()->statut(StatutBilletEnum::ANNULE)->create(['voyage_id' => $voyage->id, 'montant' => 2500]);
+
+    Sanctum::actingAs(User::factory()->admin()->create());
+
+    $this->getJson('/api/v1/voyages')
+        ->assertOk()
+        ->assertJsonPath('data.0.billets_vendus', 3)   // dont le billet gratuit
+        ->assertJsonPath('data.0.recette', 4000);      // 2500 + 1500, le gratuit n'ajoute rien
+});
+
+test('un voyage sans billet vendu affiche une recette nulle', function () {
+    Voyage::factory()->create();
+    Sanctum::actingAs(User::factory()->admin()->create());
+
+    $this->getJson('/api/v1/voyages')
+        ->assertOk()
+        ->assertJsonPath('data.0.billets_vendus', 0)
+        ->assertJsonPath('data.0.recette', 0);
+});
+
+test('le détail d\'un voyage expose aussi sa recette', function () {
+    $voyage = Voyage::factory()->create();
+    Billet::factory()->paye()->create(['voyage_id' => $voyage->id, 'montant' => 2500]);
+
+    Sanctum::actingAs(User::factory()->admin()->create());
+
+    $this->getJson("/api/v1/voyages/{$voyage->id}")
+        ->assertOk()
+        ->assertJsonPath('data.recette', 2500)
+        ->assertJsonPath('data.billets_vendus', 1);
 });
