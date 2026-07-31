@@ -66,7 +66,7 @@ test('la demande pour un email inconnu ne divulgue rien et n\'envoie pas d\'emai
 
     $this->postJson('/api/v1/password/forgot', ['email' => 'inconnu@goree.sn'])
         ->assertOk()
-        ->assertJsonPath('message', 'Si un compte existe pour cet email, un lien de réinitialisation a été envoyé.');
+        ->assertJsonPath('message', 'Si un compte existe pour cet email, un code de réinitialisation a été envoyé.');
 
     Mail::assertNothingQueued();
 });
