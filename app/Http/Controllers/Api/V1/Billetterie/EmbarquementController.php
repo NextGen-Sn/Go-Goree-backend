@@ -20,7 +20,9 @@ class EmbarquementController extends Controller
     public function index()
     {
         return response()->json(
-            Embarquement::with('voyage')
+            // trajet + chaloupe : l'app contrôleurs affiche l'horaire de départ
+            // et le nom de la chaloupe pour que l'agent identifie la session.
+            Embarquement::with(['voyage.trajet', 'voyage.chaloupe'])
                 ->where('statut', StatutEmbarquementEnum::OUVERT->value)
                 ->latest()
                 ->paginate()
@@ -38,7 +40,10 @@ class EmbarquementController extends Controller
             ['ouvert_a' => now(), 'ouvert_par' => $request->user()->id]
         );
 
-        return response()->json($embarquement->load('voyage'), Response::HTTP_OK);
+        return response()->json(
+            $embarquement->load(['voyage.trajet', 'voyage.chaloupe']),
+            Response::HTTP_OK
+        );
     }
 
     /**

@@ -88,7 +88,9 @@ class ScanController extends Controller
             'message' => $resultat === ResultatScanEnum::VALIDE ? 'Scan validé.' : 'Scan invalide.',
             'resultat' => $resultat->value,
             'scan' => $scan,
-            'billet' => new BilletResource(Billet::with(['voyage', 'tarif'])->find($billet->id)),
+            // `user` est chargé pour que le contrôleur voie le nom du passager
+            // au moment du scan et puisse le confronter à la personne devant lui.
+            'billet' => new BilletResource(Billet::with(['voyage', 'tarif', 'user'])->find($billet->id)),
         ], $resultat === ResultatScanEnum::VALIDE ? Response::HTTP_OK : Response::HTTP_UNPROCESSABLE_ENTITY);
     }
 
