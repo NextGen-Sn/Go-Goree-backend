@@ -135,3 +135,27 @@ test('le scan exige une authentification', function () {
     $this->postJson('/api/v1/scans', ['qr_token' => $billet->qr_token, 'embarquement_id' => $embarquement->id])
         ->assertUnauthorized();
 });
+
+test('la réponse de scan expose le passager du billet', function () {
+    $client = User::factory()->client()->create(['prenom' => 'Awa', 'nom' => 'Sarr']);
+    $embarquement = Embarquement::factory()->create();
+    $billet = Billet::factory()->paye()->create([
+        'voyage_id' => $embarquement->voyage_id,
+        'user_id' => $client->id,
+    ]);
+
+    Sanctum::actingAs(User::factory()->agent()->create());
+
+    // Le contrôleur doit pouvoir confronter le nom affiché à la personne
+    // qui se présente devant lui.
+    $this->postJson('/api/v1/scans', [
+        'qr_token' => $billet->qr_token,
+        'embarquement_id' => $embarquement->id,
+    ])
+        ->assertOk()
+        ->assertJsonPath('resultat', ResultatScanEnum::VALIDE->value)
+        // Pas d'enveloppe "data" : la ressource est imbriquée dans un tableau,
+        // le wrapping Laravel ne s'applique qu'à une ressource de premier niveau.
+        ->assertJsonPath('billet.user.prenom', 'Awa')
+        ->assertJsonPath('billet.user.nom', 'Sarr');
+});

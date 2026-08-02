@@ -58,3 +58,27 @@ test('l\'ouverture valide le voyage', function () {
         ->assertStatus(422)
         ->assertJsonValidationErrors(['voyage_id']);
 });
+
+test('la liste des embarquements ouverts expose la chaloupe et l\'horaire du trajet', function () {
+    $embarquement = Embarquement::factory()->create(['statut' => StatutEmbarquementEnum::OUVERT->value]);
+    Sanctum::actingAs(User::factory()->agent()->create());
+
+    // L'app contrôleurs identifie une session par son horaire et sa chaloupe :
+    // sans ces relations chargées, la liste est inutilisable.
+    $this->getJson('/api/v1/embarquements')
+        ->assertOk()
+        ->assertJsonPath('data.0.id', $embarquement->id)
+        ->assertJsonPath('data.0.voyage.id', $embarquement->voyage_id)
+        ->assertJsonStructure([
+            'data' => [['voyage' => ['trajet' => ['heure_depart'], 'chaloupe' => ['nom']]]],
+        ]);
+});
+
+test('l\'ouverture d\'une session renvoie la chaloupe et le trajet du voyage', function () {
+    $voyage = Voyage::factory()->create();
+    Sanctum::actingAs(User::factory()->agent()->create());
+
+    $this->postJson('/api/v1/embarquements/ouvrir', ['voyage_id' => $voyage->id])
+        ->assertOk()
+        ->assertJsonStructure(['voyage' => ['trajet' => ['heure_depart'], 'chaloupe' => ['nom']]]);
+});
