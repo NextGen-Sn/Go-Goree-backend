@@ -27,6 +27,25 @@ use Illuminate\Support\Str;
 
 class DatabaseSeeder extends Seeder
 {
+    /**
+     * Crée (ou retrouve) un utilisateur de démo, y compris s'il a été supprimé.
+     *
+     * `firstOrCreate` exclut les lignes soft-deleted de sa recherche : il tente
+     * alors un INSERT que l'index unique sur `email` rejette, et tout le seeder
+     * s'arrête. On cherche donc parmi les supprimés, et on restaure le compte
+     * pour qu'il redevienne utilisable.
+     */
+    private function utilisateurDemo(string $email, array $attributs): User
+    {
+        $user = User::withTrashed()->firstOrCreate(['email' => $email], $attributs);
+
+        if ($user->trashed()) {
+            $user->restore();
+        }
+
+        return $user;
+    }
+
     public function run(): void
     {
         // 1) Rôles
@@ -47,26 +66,27 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        // 3) Contrôleurs (Oumar Fall, Mariama Diop, Aliou Ndong)
+        // 3) Contrôleurs — mot de passe commun : Agent@1234
+        // `controleur@goree.sn` est le compte de test de l'app contrôleurs :
+        // nom explicite, pour ne pas dépendre d'un agent nominatif qui pourrait
+        // être désactivé ou supprimé (c'est arrivé à Oumar Fall).
         $controleursData = [
+            ['Ousmane', 'Sagna', 'controleur@goree.sn'],
             ['Oumar', 'Fall', 'oumar.fall@goree.sn'],
             ['Mariama', 'Diop', 'mariama.diop@goree.sn'],
             ['Aliou', 'Ndong', 'aliou.ndong@goree.sn'],
         ];
         $agents = [];
         foreach ($controleursData as [$prenom, $nom, $email]) {
-            $agents[] = User::firstOrCreate(
-                ['email' => $email],
-                [
-                    'prenom' => $prenom,
-                    'nom' => $nom,
-                    'telephone' => '77' . rand(1000000, 9999999),
-                    'mot_de_passe' => Hash::make('Agent@1234'),
-                    'password_reset_at' => now(),
-                    'active' => true,
-                    'role_id' => $agentRole->id,
-                ]
-            );
+            $agents[] = $this->utilisateurDemo($email, [
+                'prenom' => $prenom,
+                'nom' => $nom,
+                'telephone' => '77' . rand(1000000, 9999999),
+                'mot_de_passe' => Hash::make('Agent@1234'),
+                'password_reset_at' => now(),
+                'active' => true,
+                'role_id' => $agentRole->id,
+            ]);
         }
 
         // 4) Clients de démo avec portefeuilles garnis
@@ -83,19 +103,16 @@ class DatabaseSeeder extends Seeder
 
         $clients = [];
         foreach ($clientsData as [$prenom, $nom, $email, $solde, $estResident]) {
-            $user = User::firstOrCreate(
-                ['email' => $email],
-                [
-                    'prenom' => $prenom,
-                    'nom' => $nom,
-                    'telephone' => '77' . rand(1000000, 9999999),
-                    'mot_de_passe' => Hash::make('Client@1234'),
-                    'password_reset_at' => now(),
-                    'active' => true,
-                    'est_resident' => $estResident,
-                    'role_id' => $clientRole->id,
-                ]
-            );
+            $user = $this->utilisateurDemo($email, [
+                'prenom' => $prenom,
+                'nom' => $nom,
+                'telephone' => '77' . rand(1000000, 9999999),
+                'mot_de_passe' => Hash::make('Client@1234'),
+                'password_reset_at' => now(),
+                'active' => true,
+                'est_resident' => $estResident,
+                'role_id' => $clientRole->id,
+            ]);
             $clients[] = $user;
 
             Portefeuille::updateOrCreate(
