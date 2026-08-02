@@ -19,7 +19,10 @@ class VoyageFactory extends Factory
         $places = fake()->numberBetween(50, 150);
 
         return [
-            'date_voyage' => now()->addDays(fake()->numberBetween(0, 7))->toDateString(),
+            // À partir de demain : un voyage daté d'aujourd'hui tomberait, selon
+            // l'heure d'exécution des tests, sur un départ déjà passé — donc
+            // refusé à l'achat et invisible dans les listings.
+            'date_voyage' => now()->addDays(fake()->numberBetween(1, 7))->toDateString(),
             'places' => $places,
             'places_restantes' => $places,
             'trajet_id' => Trajet::factory(),

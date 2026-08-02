@@ -36,9 +36,11 @@ class VoyageController extends Controller
             $query->whereDate('date_voyage', $today);
         } elseif ($request->periode === 'semaine') {
             $query->whereBetween('date_voyage', [$today, now()->addDays(6)->toDateString()]);
+            $this->exclureDepartsPasses($query, $today);
         } else {
             // Par défaut : les voyages à venir (aujourd'hui et après).
             $query->whereDate('date_voyage', '>=', $today);
+            $this->exclureDepartsPasses($query, $today);
         }
 
         if ($request->boolean('disponibles')) {
@@ -46,6 +48,27 @@ class VoyageController extends Controller
         }
 
         return VoyageResource::collection($query->paginate());
+    }
+
+    /**
+     * Retire du listing les départs du jour dont l'heure est passée.
+     *
+     * Ces listings alimentent l'achat côté client : proposer la chaloupe de
+     * 07h30 à 21h revient à vendre une place sur un bateau déjà parti. Le
+     * filtre ne s'applique pas à `?periode=today` ni à `?date=`, qui servent
+     * aux contrôleurs et à l'admin — eux ont besoin de la journée entière.
+     */
+    private function exclureDepartsPasses($query, string $today): void
+    {
+        $maintenant = now()->toTimeString();
+
+        $query->where(function ($q) use ($today, $maintenant) {
+            $q->whereDate('date_voyage', '>', $today)
+                ->orWhere(function ($jour) use ($today, $maintenant) {
+                    $jour->whereDate('date_voyage', $today)
+                        ->whereHas('trajet', fn ($t) => $t->where('heure_depart', '>', $maintenant));
+                });
+        });
     }
 
     /**

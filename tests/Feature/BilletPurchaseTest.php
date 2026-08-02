@@ -13,8 +13,10 @@ use App\Models\User;
 use App\Models\Voyage;
 use App\Services\Paiements\PayDunya\PayDunyaClientInterface;
 use App\Services\Paiements\PayDunyaPaymentService;
+use App\Models\Trajet;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 
@@ -284,4 +286,55 @@ test('un client ne peut pas consulter le billet d\'un autre', function () {
     Sanctum::actingAs(User::factory()->client()->create());
 
     $this->getJson("/api/v1/billets/{$autre->id}")->assertForbidden();
+});
+
+test('impossible d\'acheter un billet pour un voyage déjà parti', function () {
+    // Il est 21h, la chaloupe de 07h30 est partie depuis longtemps.
+    Carbon::setTestNow(Carbon::today()->setTime(21, 0));
+
+    $client = User::factory()->client()->create();
+    Portefeuille::factory()->solde(10000)->create(['user_id' => $client->id]);
+    Tarif::factory()->etranger(2500)->create();
+
+    $voyage = Voyage::factory()->placesRestantes(10)->create([
+        'date_voyage' => now()->toDateString(),
+        'trajet_id' => Trajet::factory()->create(['heure_depart' => '07:30'])->id,
+    ]);
+
+    Sanctum::actingAs($client);
+
+    $this->postJson('/api/v1/billets', [
+        'voyage_id' => $voyage->id,
+        'payment_mode' => ModePayementEnum::PORTEFEUILLE->value,
+    ])->assertStatus(400)
+        ->assertJsonPath('message', 'Ce voyage est déjà parti, il n\'est plus achetable.');
+
+    // Rien n'est encaissé et aucune place n'est réservée.
+    expect(Billet::where('user_id', $client->id)->count())->toBe(0);
+    expect((float) Portefeuille::where('user_id', $client->id)->first()->solde)->toBe(10000.0);
+    expect($voyage->fresh()->places_restantes)->toBe(10);
+
+    Carbon::setTestNow();
+});
+
+test('un départ encore à venir dans la journée reste achetable', function () {
+    Carbon::setTestNow(Carbon::today()->setTime(6, 0));
+
+    $client = User::factory()->client()->create();
+    Portefeuille::factory()->solde(10000)->create(['user_id' => $client->id]);
+    Tarif::factory()->etranger(2500)->create();
+
+    $voyage = Voyage::factory()->placesRestantes(10)->create([
+        'date_voyage' => now()->toDateString(),
+        'trajet_id' => Trajet::factory()->create(['heure_depart' => '07:30'])->id,
+    ]);
+
+    Sanctum::actingAs($client);
+
+    $this->postJson('/api/v1/billets', [
+        'voyage_id' => $voyage->id,
+        'payment_mode' => ModePayementEnum::PORTEFEUILLE->value,
+    ])->assertCreated();
+
+    Carbon::setTestNow();
 });

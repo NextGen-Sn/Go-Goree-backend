@@ -16,6 +16,7 @@ use App\Models\AlerteFraude;
 use App\Models\Billet;
 use App\Models\Tarif;
 use App\Models\User;
+use App\Models\Voyage;
 use App\Repositories\Contracts\BilletRepositoryInterface;
 use App\Services\Billetterie\SubServices\BilletQrTokenGeneratorService;
 use App\Services\Billetterie\SubServices\PaymentInitiationService;
@@ -23,6 +24,7 @@ use App\Services\Billetterie\SubServices\PlaceReservationService;
 use App\Services\Billetterie\SubServices\ResidentAbonnementCheckerService;
 use App\Services\Billetterie\SubServices\TarifResolverService;
 use App\Services\Portefeuille\PortefeuilleService;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -62,6 +64,8 @@ class BilletPurchaseService
 
     public function purchase(User $user, string $voyageId, ModePayementEnum $paymentMode, ?CategorieEnum $requestedCategory = null): array
     {
+        $this->refuserVoyageDejaParti($voyageId);
+
         $estAbonne = $this->abonnementChecker->check($user);
 
         // Anti-fraude : un résident abonné ne peut générer qu'UN seul billet
@@ -148,6 +152,30 @@ class BilletPurchaseService
         }
 
         return $this->tarifResolver->resolve($user, $requestedCategory);
+    }
+
+    /**
+     * Refuse l'achat d'un voyage dont l'heure de départ est passée.
+     *
+     * Sans ce garde-fou, la chaloupe de 07h30 reste achetable à 21h : le billet
+     * est encaissé puis immédiatement basculé en EXPIRE par ExpireTicketsJob
+     * (qui expire une heure après le départ). Le client paie pour rien.
+     */
+    private function refuserVoyageDejaParti(string $voyageId): void
+    {
+        $voyage = Voyage::with('trajet')->find($voyageId);
+
+        if (! $voyage || ! $voyage->trajet) {
+            return; // Voyage inconnu ou horaire indisponible : la validation amont tranche.
+        }
+
+        $depart = Carbon::parse(
+            $voyage->date_voyage->toDateString().' '.$voyage->trajet->heure_depart
+        );
+
+        if ($depart->isPast()) {
+            throw new \RuntimeException('Ce voyage est déjà parti, il n\'est plus achetable.');
+        }
     }
 
     /**
