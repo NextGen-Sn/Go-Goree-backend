@@ -25,11 +25,20 @@ class BilletController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Billet::with(['voyage', 'tarif', 'user']);
+        // voyage.trajet : l'app affiche l'heure de départ sur chaque billet.
+        // Sans ce chargement, la relation part en lazy loading (N+1) et le
+        // client reçoit un `trajet` absent selon le contexte.
+        $query = Billet::with(['voyage.trajet', 'tarif', 'user']);
 
         if ($request->user()->role && $request->user()->role->nom === RoleEnum::CLIENT) {
             $query->where('user_id', $request->user()->id);
         }
+
+        // Du plus récent au plus ancien. Sans tri explicite, la base renvoyait
+        // les billets par ordre d'insertion : un billet fraîchement acheté
+        // atterrissait en dernière page de pagination, donc invisible dans
+        // l'app qui n'affiche que la première.
+        $query->latest();
 
         return BilletResource::collection($query->paginate());
     }
