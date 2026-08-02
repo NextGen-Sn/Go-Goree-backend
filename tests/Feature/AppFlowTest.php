@@ -145,7 +145,9 @@ test('flux complet de l\'application : authentification, résidence, recharge, a
         'duree' => 20,
     ]);
     $voyage = Voyage::create([
-        'date_voyage' => now()->toDateString(),
+        // Demain : un départ à 07h30 daté d'aujourd'hui serait refusé à l'achat
+        // dès que la suite tourne après cette heure-là.
+        'date_voyage' => now()->addDay()->toDateString(),
         'places' => 150,
         'places_restantes' => 150,
         'trajet_id' => $trajet->id,
