@@ -8,6 +8,7 @@ use App\Http\Requests\Api\V1\Auth\LoginRequest;
 use App\Http\Requests\Api\V1\Auth\RegisterRequest;
 use App\Http\Resources\Api\V1\LoginResource;
 use App\Http\Resources\Api\V1\UserResource;
+use App\Models\Portefeuille;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -40,6 +41,11 @@ class AuthController extends Controller
             'password_reset_at' => now(),
             'role_id' => $roleClient->id,
         ]);
+
+        // Tout client a un portefeuille dès l'inscription : sans lui,
+        // GET /portefeuille renvoie 404 et l'écran « Portefeuille » de l'app
+        // est inutilisable jusqu'à la première recharge.
+        Portefeuille::firstOrCreate(['user_id' => $user->id], ['solde' => 0]);
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
