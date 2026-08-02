@@ -27,13 +27,21 @@ class ExpireTicketsJob implements ShouldQueue
         $pivot = now()->subHour();
 
         // Voyages dont le départ remonte à plus d'une heure.
+        //
+        // `whereDate` et non une comparaison de chaînes : `date_voyage` est une
+        // colonne DATE mais transite en « 2026-08-01 00:00:00 ». Comparée telle
+        // quelle à « 2026-08-01 », elle n'est ni égale ni inférieure — le
+        // préfixe est identique mais la chaîne est plus longue. Entre minuit et
+        // 1h du matin, l'heure pivot tombe la veille : les deux branches de la
+        // condition échouaient alors ensemble, et les billets de la veille
+        // restaient PAYE pendant toute cette heure-là.
         $expiredVoyageIds = Voyage::join('trajets', 'voyages.trajet_id', '=', 'trajets.id')
             ->where(function ($query) use ($pivot) {
                 // Voyage d'un jour précédent
-                $query->where('voyages.date_voyage', '<', $pivot->toDateString())
-                    // Voyage d'aujourd'hui dont l'heure de départ est passée depuis > 1h
+                $query->whereDate('voyages.date_voyage', '<', $pivot->toDateString())
+                    // Voyage du jour pivot dont l'heure de départ est passée depuis > 1h
                     ->orWhere(function ($q) use ($pivot) {
-                        $q->where('voyages.date_voyage', '=', $pivot->toDateString())
+                        $q->whereDate('voyages.date_voyage', '=', $pivot->toDateString())
                             ->where('trajets.heure_depart', '<=', $pivot->toTimeString());
                     });
             })
