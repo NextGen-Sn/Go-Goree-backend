@@ -129,3 +129,58 @@ test('le refus exige un motif', function () {
         ->assertStatus(422)
         ->assertJsonValidationErrors(['motif_refus']);
 });
+
+test('une deuxième demande est refusée tant que la première est en cours', function () {
+    $client = User::factory()->client()->create();
+    DemandeResidence::factory()->create([
+        'user_id' => $client->id,
+        'statut' => DemandeResidenceEnum::EN_COURS->value,
+    ]);
+
+    Sanctum::actingAs($client);
+
+    $this->postJson('/api/v1/demandes-residence', [
+        'carte_identite' => 'CNI123456789',
+        'residence' => 'Gorée Centre',
+        'photo' => 'demandes_residence/photo.png',
+    ])
+        ->assertStatus(409)
+        ->assertJsonPath('message', 'Une demande est déjà en cours d\'examen. Vous serez notifié dès qu\'elle aura été traitée.');
+
+    expect(DemandeResidence::where('user_id', $client->id)->count())->toBe(1);
+});
+
+test('un résident déjà accepté ne peut pas redéposer de demande', function () {
+    $client = User::factory()->client()->resident()->create();
+    Sanctum::actingAs($client);
+
+    $this->postJson('/api/v1/demandes-residence', [
+        'carte_identite' => 'CNI123456789',
+        'residence' => 'Gorée Centre',
+        'photo' => 'demandes_residence/photo.png',
+    ])
+        ->assertStatus(409)
+        ->assertJsonPath('message', 'Vous êtes déjà résident. Aucune nouvelle demande n\'est nécessaire.');
+
+    expect(DemandeResidence::where('user_id', $client->id)->count())->toBe(0);
+});
+
+test('après un refus, une nouvelle demande est possible', function () {
+    $client = User::factory()->client()->create();
+    DemandeResidence::factory()->create([
+        'user_id' => $client->id,
+        'statut' => DemandeResidenceEnum::REFUSEE->value,
+        'motif_refus' => 'Pièce illisible',
+    ]);
+
+    Sanctum::actingAs($client);
+
+    // C'est précisément le cas où l'utilisateur doit pouvoir recommencer.
+    $this->postJson('/api/v1/demandes-residence', [
+        'carte_identite' => 'CNI987654321',
+        'residence' => 'Gorée Nord',
+        'photo' => 'demandes_residence/photo2.png',
+    ])->assertCreated();
+
+    expect(DemandeResidence::where('user_id', $client->id)->count())->toBe(2);
+});
