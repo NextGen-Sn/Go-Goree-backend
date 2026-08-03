@@ -43,6 +43,10 @@ class DemandeResidenceController extends Controller
      */
     public function store(StoreDemandeResidenceRequest $request)
     {
+        if ($conflit = $this->demandeDejaEnCours($request->user())) {
+            return response()->json(['message' => $conflit], Response::HTTP_CONFLICT);
+        }
+
         $photoPath = $request->photo;
         if ($request->hasFile('photo_file')) {
             $photoPath = $request->file('photo_file')->store('demandes_residence', 'public');
@@ -159,5 +163,40 @@ class DemandeResidenceController extends Controller
             'message' => 'Demande de résidence refusée.',
             'demande' => new DemandeResidenceResource($demande),
         ]);
+    }
+
+    /**
+     * Motif de refus d'une nouvelle demande, ou null si elle est recevable.
+     *
+     * Rien n'empêchait jusqu'ici d'empiler les demandes : l'app masque bien le
+     * formulaire quand une demande existe, mais un cache pas encore rafraîchi,
+     * un second appareil ou un appel direct à l'API suffisaient à en créer une
+     * autre. Un compte de démonstration cumulait ainsi trois demandes, dont
+     * deux déposées après avoir déjà été accepté.
+     *
+     * Une demande refusée ou annulée, elle, n'est pas bloquante : c'est
+     * précisément le cas où l'on doit pouvoir en redéposer une.
+     */
+    private function demandeDejaEnCours(\App\Models\User $user): ?string
+    {
+        if ($user->est_resident) {
+            return 'Vous êtes déjà résident. Aucune nouvelle demande n\'est nécessaire.';
+        }
+
+        $existante = DemandeResidence::where('user_id', $user->id)
+            ->whereIn('statut', [
+                DemandeResidenceEnum::EN_COURS->value,
+                DemandeResidenceEnum::ACCEPTEE->value,
+            ])
+            ->latest()
+            ->first();
+
+        if (! $existante) {
+            return null;
+        }
+
+        return $existante->statut === DemandeResidenceEnum::ACCEPTEE
+            ? 'Votre demande a déjà été acceptée.'
+            : 'Une demande est déjà en cours d\'examen. Vous serez notifié dès qu\'elle aura été traitée.';
     }
 }
