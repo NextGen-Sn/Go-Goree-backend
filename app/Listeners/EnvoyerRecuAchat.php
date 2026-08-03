@@ -34,7 +34,8 @@ class EnvoyerRecuAchat
                 $user,
                 NotificationEnum::PAYEMENT,
                 CanalEnum::MAIL,
-                $message
+                $message,
+                'Billet confirmé'
             );
 
             // Envoi de la notification in-app
@@ -42,7 +43,8 @@ class EnvoyerRecuAchat
                 $user,
                 NotificationEnum::PAYEMENT,
                 CanalEnum::IN_APP,
-                $message
+                $message,
+                'Billet confirmé'
             );
 
             Log::info("EnvoyerRecuAchat : Reçu d'achat envoyé à l'utilisateur ID {$user->id} pour le billet ID {$billet->id}");

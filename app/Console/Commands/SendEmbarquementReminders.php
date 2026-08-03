@@ -49,15 +49,19 @@ class SendEmbarquementReminders extends Command
                 if ($billet->statut === 'PAYE' && $billet->user) {
                     $user = $billet->user;
 
-                    // Créer la notification in-app
+                    $message = "Rappel : Votre voyage à bord de la chaloupe '{$voyage->chaloupe->nom}' part à {$voyage->trajet->heure_depart}. Il vous reste environ 15 minutes avant l'embarquement.";
+
+                    // Créer la notification in-app, contenu compris : le rappel
+                    // doit rester lisible dans l'app même si le passager n'était
+                    // pas connecté au moment de la diffusion.
                     $notification = Notification::create([
                         'type' => NotificationEnum::ALERTE,
+                        'titre' => 'Départ imminent',
+                        'message' => $message,
                         'canal' => CanalEnum::IN_APP,
                         'lu_a' => null,
                         'user_id' => $user->id,
                     ]);
-
-                    $message = "Rappel : Votre voyage à bord de la chaloupe '{$voyage->chaloupe->nom}' part à {$voyage->trajet->heure_depart}. Il vous reste environ 15 minutes avant l'embarquement.";
 
                     // Diffuser en temps réel avec Laravel Reverb
                     event(new NotificationCreee($notification, $message));

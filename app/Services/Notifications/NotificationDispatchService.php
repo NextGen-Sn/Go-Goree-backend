@@ -17,11 +17,21 @@ class NotificationDispatchService
     /**
      * Distribuer une notification à un utilisateur.
      */
-    public function dispatch(User $user, NotificationEnum $type, CanalEnum $canal, string $message): Notification
-    {
+    public function dispatch(
+        User $user,
+        NotificationEnum $type,
+        CanalEnum $canal,
+        string $message,
+        ?string $titre = null
+    ): Notification {
+        // Le contenu est persisté, pas seulement diffusé : un destinataire hors
+        // ligne au moment de l'envoi doit retrouver la notification complète en
+        // rouvrant l'app.
         $notification = Notification::create([
             'user_id' => $user->id,
             'type' => $type,
+            'titre' => $titre,
+            'message' => $message,
             'canal' => $canal,
             'lu_a' => null,
         ]);

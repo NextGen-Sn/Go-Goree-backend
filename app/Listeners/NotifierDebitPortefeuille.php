@@ -34,7 +34,8 @@ class NotifierDebitPortefeuille
                 $user,
                 NotificationEnum::PAYEMENT,
                 CanalEnum::IN_APP,
-                $message
+                $message,
+                'Portefeuille débité'
             );
 
             Log::info("NotifierDebitPortefeuille : Notification in-app envoyée à l'utilisateur ID {$user->id} pour le débit de {$event->montant} FCFA.");

@@ -96,6 +96,8 @@ class NotificationController extends Controller
             if (in_array('In-App', $request->canaux, true)) {
                 $notification = Notification::create([
                     'type' => NotificationEnum::ALERTE,
+                    'titre' => $request->titre,
+                    'message' => $request->message,
                     'canal' => CanalEnum::IN_APP,
                     'lu_a' => null,
                     'user_id' => $user->id,
