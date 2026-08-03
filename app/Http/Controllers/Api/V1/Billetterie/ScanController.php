@@ -27,6 +27,14 @@ use Illuminate\Http\Response;
  */
 class ScanController extends Controller
 {
+    /**
+     * Délai pendant lequel un second passage du même billet, par le même agent
+     * et sur la même session, est considéré comme un geste de contrôle et non
+     * comme une tentative de fraude.
+     */
+    private const FENETRE_RESCAN_SECONDES = 10;
+
+
     public function index()
     {
         return response()->json(Scan::with('billet')->paginate());
@@ -80,7 +88,8 @@ class ScanController extends Controller
 
         if ($resultat === ResultatScanEnum::VALIDE) {
             event(new BilletScanne($scan));
-        } elseif ($resultat === ResultatScanEnum::DEJA_SCANNE) {
+        } elseif ($resultat === ResultatScanEnum::DEJA_SCANNE
+            && ! $this->estUnRescanImmediat($billet->id, $embarquement->id, $request->user()->id)) {
             $this->signalerDoubleScan($billet->id, $embarquement->id);
         }
 
@@ -109,6 +118,29 @@ class ScanController extends Controller
             StatutBilletEnum::EXPIRE => ResultatScanEnum::EXPIRE,
             default => ResultatScanEnum::NON_EMBARQUE,
         };
+    }
+
+    /**
+     * Ce second passage est-il le geste normal de l'agent qui vient de valider ?
+     *
+     * Un contrôleur repasse souvent le QR : mauvais cadrage, doute sur le bip,
+     * passager qui approche à nouveau son téléphone. Traiter cela en fraude
+     * remplit le dossier de passagers honnêtes d'alertes — treize en vingt
+     * secondes lors d'un test, sur un billet parfaitement valide.
+     *
+     * La tolérance est étroite à dessein : même billet, même session, même
+     * agent, et seulement dans la foulée d'une validation réussie. Un autre
+     * agent, une autre session ou un passage plus tardif restent signalés —
+     * ce sont eux qui traduisent une vraie tentative de réutilisation.
+     */
+    private function estUnRescanImmediat(string $billetId, string $embarquementId, string $agentId): bool
+    {
+        return Scan::where('billet_id', $billetId)
+            ->where('embarquement_id', $embarquementId)
+            ->where('scanne_par', $agentId)
+            ->where('resultat', ResultatScanEnum::VALIDE->value)
+            ->where('created_at', '>=', now()->subSeconds(self::FENETRE_RESCAN_SECONDES))
+            ->exists();
     }
 
     /**

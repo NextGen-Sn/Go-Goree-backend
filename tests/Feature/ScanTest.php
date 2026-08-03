@@ -8,6 +8,7 @@ use App\Models\Scan;
 use App\Models\User;
 use App\Models\Voyage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Laravel\Sanctum\Sanctum;
 
 uses(RefreshDatabase::class);
@@ -158,4 +159,49 @@ test('la réponse de scan expose le passager du billet', function () {
         // le wrapping Laravel ne s'applique qu'à une ressource de premier niveau.
         ->assertJsonPath('billet.user.prenom', 'Awa')
         ->assertJsonPath('billet.user.nom', 'Sarr');
+});
+
+test('repasser le billet dans la foulée ne déclenche pas d\'alerte de fraude', function () {
+    [$embarquement, $billet] = scenarioScan(StatutBilletEnum::PAYE);
+    $agent = User::factory()->agent()->create();
+    Sanctum::actingAs($agent);
+
+    $payload = ['qr_token' => $billet->qr_token, 'embarquement_id' => $embarquement->id];
+
+    $this->postJson('/api/v1/scans', $payload)->assertJsonPath('resultat', ResultatScanEnum::VALIDE->value);
+    // Mauvais cadrage, doute sur le bip : l'agent repasse le QR.
+    $this->postJson('/api/v1/scans', $payload)->assertJsonPath('resultat', ResultatScanEnum::DEJA_SCANNE->value);
+
+    // Le scan reste tracé, mais le passager n'est pas fiché.
+    expect(Scan::where('billet_id', $billet->id)->count())->toBe(2);
+    $this->assertDatabaseMissing('alerte_fraudes', ['regle_declenchee' => 'double_scan_billet']);
+});
+
+test('un autre agent qui rescanne le même billet déclenche bien l\'alerte', function () {
+    [$embarquement, $billet] = scenarioScan(StatutBilletEnum::PAYE);
+    $payload = ['qr_token' => $billet->qr_token, 'embarquement_id' => $embarquement->id];
+
+    Sanctum::actingAs(User::factory()->agent()->create());
+    $this->postJson('/api/v1/scans', $payload)->assertJsonPath('resultat', ResultatScanEnum::VALIDE->value);
+
+    // Deuxième agent : là, quelqu'un tente bien de repasser avec le même billet.
+    Sanctum::actingAs(User::factory()->agent()->create());
+    $this->postJson('/api/v1/scans', $payload)->assertJsonPath('resultat', ResultatScanEnum::DEJA_SCANNE->value);
+
+    $this->assertDatabaseHas('alerte_fraudes', ['regle_declenchee' => 'double_scan_billet']);
+});
+
+test('un rescan tardif par le même agent est signalé', function () {
+    [$embarquement, $billet] = scenarioScan(StatutBilletEnum::PAYE);
+    Sanctum::actingAs(User::factory()->agent()->create());
+    $payload = ['qr_token' => $billet->qr_token, 'embarquement_id' => $embarquement->id];
+
+    $this->postJson('/api/v1/scans', $payload)->assertJsonPath('resultat', ResultatScanEnum::VALIDE->value);
+
+    // Une minute plus tard, ce n'est plus un geste de contrôle.
+    Carbon::setTestNow(now()->addMinute());
+    $this->postJson('/api/v1/scans', $payload)->assertJsonPath('resultat', ResultatScanEnum::DEJA_SCANNE->value);
+    Carbon::setTestNow();
+
+    $this->assertDatabaseHas('alerte_fraudes', ['regle_declenchee' => 'double_scan_billet']);
 });
