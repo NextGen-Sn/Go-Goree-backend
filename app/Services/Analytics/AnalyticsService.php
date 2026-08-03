@@ -2,6 +2,8 @@
 
 namespace App\Services\Analytics;
 
+use App\Enums\ResultatScanEnum;
+use App\Enums\StatutBilletEnum;
 use App\Models\Billet;
 use App\Models\Chaloupe;
 use App\Models\Payement;
@@ -28,6 +30,8 @@ class AnalyticsService
                 'hourly_boardings' => $this->getHourlyBoardingDistribution(),
                 'chaloupes_occupations' => $this->getChaloupesOccupations(),
                 'daily_historique' => $this->getDailyHistorique(),
+                'historique_voyages' => $this->getHistoriqueVoyages(),
+                'validation_qr' => $this->getValidationQr(),
                 'payment_methods' => $this->getPaymentMethodsRepartition(),
                 'wallet_overview' => $this->getWalletOverview(),
             ];
@@ -441,5 +445,81 @@ class AnalyticsService
             return "EXTRACT(HOUR FROM created_at)";
         }
         return "HOUR(created_at)";
+    }
+
+    /**
+     * Récapitulatif de l'année en cours, pour la page « Historique des voyages ».
+     *
+     * Ces quatre chiffres étaient écrits en dur dans l'admin (1 247 voyages,
+     * 563 480 passagers…) et s'affichaient à l'identique quelles que soient les
+     * données réelles.
+     */
+    private function getHistoriqueVoyages(): array
+    {
+        $annee = now()->year;
+
+        $voyages = Voyage::whereYear('date_voyage', $annee);
+
+        $billets = Billet::whereIn('statut', [
+            StatutBilletEnum::PAYE->value,
+            StatutBilletEnum::UTILISE->value,
+        ])->whereYear('created_at', $annee);
+
+        // Moyenne pondérée : un voyage de 450 places ne pèse pas autant qu'un
+        // de 150 dans le taux d'occupation global.
+        $capacites = Voyage::whereYear('date_voyage', $annee)
+            ->selectRaw('COALESCE(SUM(places), 0) as total, COALESCE(SUM(places - places_restantes), 0) as occupees')
+            ->first();
+
+        return [
+            'total_voyages' => (int) $voyages->count(),
+            'passagers_transportes' => (int) (clone $billets)->count(),
+            'recettes_totales' => (float) (clone $billets)->sum('montant'),
+            'taux_occupation_moyen' => $capacites->total > 0
+                ? round($capacites->occupees / $capacites->total * 100, 1)
+                : 0.0,
+        ];
+    }
+
+    /**
+     * Contrôle des QR sur le mois en cours, global et par contrôleur.
+     *
+     * La section « Taux de validation » de l'admin n'avait aucun endpoint : ses
+     * chiffres et sa liste d'agents étaient inventés.
+     */
+    private function getValidationQr(): array
+    {
+        $debutMois = now()->startOfMonth();
+
+        $scans = Scan::where('created_at', '>=', $debutMois);
+        $total = (clone $scans)->count();
+        $valides = (clone $scans)->where('resultat', ResultatScanEnum::VALIDE->value)->count();
+
+        $parControleur = Scan::where('scans.created_at', '>=', $debutMois)
+            ->join('users', 'users.id', '=', 'scans.scanne_par')
+            ->groupBy('users.id', 'users.prenom', 'users.nom')
+            ->selectRaw(
+                "users.id, users.prenom, users.nom, COUNT(*) as total, ".
+                "SUM(CASE WHEN scans.resultat = ? THEN 1 ELSE 0 END) as valides",
+                [ResultatScanEnum::VALIDE->value]
+            )
+            ->get()
+            ->map(fn ($ligne) => [
+                'id' => $ligne->id,
+                'nom' => trim("{$ligne->prenom} {$ligne->nom}"),
+                'scannes' => (int) $ligne->total,
+                'taux' => $ligne->total > 0 ? round($ligne->valides / $ligne->total * 100, 1) : 0.0,
+            ])
+            ->sortByDesc('scannes')
+            ->values()
+            ->all();
+
+        return [
+            'scannes_mois' => $total,
+            'valides' => $valides,
+            'invalides' => $total - $valides,
+            'taux_global' => $total > 0 ? round($valides / $total * 100, 1) : 0.0,
+            'par_controleur' => $parControleur,
+        ];
     }
 }
