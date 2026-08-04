@@ -46,7 +46,8 @@ class NotifierAgentNouvelleDemande
                 $admin,
                 NotificationEnum::ALERTE,
                 CanalEnum::IN_APP,
-                $message
+                $message,
+                'Nouvelle demande de résidence'
             );
 
             // Email détaillé.

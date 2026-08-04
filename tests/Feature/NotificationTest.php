@@ -1,5 +1,7 @@
 <?php
 
+use App\Enums\CanalEnum;
+use App\Enums\NotificationEnum;
 use App\Models\Notification;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -55,4 +57,47 @@ test('un utilisateur ne peut pas accéder à la notification d\'un autre (S5 cor
 
     // La notification de l'autre n'a pas été modifiée/supprimée.
     $this->assertDatabaseHas('notifications', ['id' => $autre->id, 'lu_a' => null]);
+});
+
+test('une notification conserve son titre et son message', function () {
+    $user = User::factory()->client()->create();
+
+    app(\App\Services\Notifications\NotificationDispatchService::class)->dispatch(
+        $user,
+        NotificationEnum::PAYEMENT,
+        CanalEnum::IN_APP,
+        'Votre billet Dakar ↔ Gorée a été généré.',
+        'Billet confirmé'
+    );
+
+    // Le contenu doit survivre à la diffusion : un destinataire hors ligne
+    // retrouve la notification complète en rouvrant l'app.
+    $this->assertDatabaseHas('notifications', [
+        'user_id' => $user->id,
+        'titre' => 'Billet confirmé',
+        'message' => 'Votre billet Dakar ↔ Gorée a été généré.',
+    ]);
+
+    Sanctum::actingAs($user);
+    $this->getJson('/api/v1/notifications')
+        ->assertOk()
+        ->assertJsonPath('data.0.titre', 'Billet confirmé');
+});
+
+test('une campagne admin enregistre son contenu chez chaque destinataire', function () {
+    $client = User::factory()->client()->create();
+    Sanctum::actingAs(User::factory()->admin()->create());
+
+    $this->postJson('/api/v1/notifications/broadcast', [
+        'titre' => 'Service perturbé',
+        'message' => 'Les départs de 14h et 16h sont annulés.',
+        'canaux' => ['In-App'],
+        'destinataires' => 'Tous les passagers',
+    ])->assertCreated();
+
+    $this->assertDatabaseHas('notifications', [
+        'user_id' => $client->id,
+        'titre' => 'Service perturbé',
+        'message' => 'Les départs de 14h et 16h sont annulés.',
+    ]);
 });

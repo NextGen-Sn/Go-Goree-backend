@@ -43,7 +43,8 @@ class NotifierEmbarquement
                     $user,
                     NotificationEnum::ALERTE,
                     CanalEnum::IN_APP,
-                    $message
+                    $message,
+                    'Embarquement ouvert'
                 );
 
                 // Envoi d'un SMS
@@ -51,7 +52,8 @@ class NotifierEmbarquement
                     $user,
                     NotificationEnum::ALERTE,
                     CanalEnum::SMS,
-                    $message
+                    $message,
+                    'Embarquement ouvert'
                 );
 
                 Log::info("NotifierEmbarquement : Notifications d'embarquement envoyées à l'utilisateur ID {$user->id} pour le billet ID {$billet->id}");
