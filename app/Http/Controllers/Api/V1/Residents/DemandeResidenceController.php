@@ -11,6 +11,7 @@ use App\Http\Requests\Api\V1\Residents\ValiderDemandeResidenceRequest;
 use App\Http\Resources\Api\V1\DemandeResidenceResource;
 use App\Models\DemandeResidence;
 use App\Services\Residents\DemandeResidenceValidationService;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
@@ -67,16 +68,24 @@ class DemandeResidenceController extends Controller
             $certificatResidencePath = $request->file('certificat_residence_file')->store('demandes_residence', 'public');
         }
 
-        $demande = DemandeResidence::create([
-            'carte_identite' => $request->carte_identite,
-            'residence' => $request->residence,
-            'photo' => $photoPath ?? 'photo_defaut.png',
-            'cni_recto' => $cniRectoPath,
-            'cni_verso' => $cniVersoPath,
-            'certificat_residence' => $certificatResidencePath,
-            'statut' => DemandeResidenceEnum::EN_COURS,
-            'user_id' => $request->user()->id,
-        ]);
+        try {
+            $demande = DemandeResidence::create([
+                'carte_identite' => $request->carte_identite,
+                'residence' => $request->residence,
+                'photo' => $photoPath ?? 'photo_defaut.png',
+                'cni_recto' => $cniRectoPath,
+                'cni_verso' => $cniVersoPath,
+                'certificat_residence' => $certificatResidencePath,
+                'statut' => DemandeResidenceEnum::EN_COURS,
+                'user_id' => $request->user()->id,
+            ]);
+        } catch (UniqueConstraintViolationException $e) {
+            // Course perdue : une autre requête du même utilisateur a créé la
+            // demande entre la vérification ci-dessus et cette insertion.
+            return response()->json([
+                'message' => 'Une demande est déjà en cours d\'examen. Vous serez notifié dès qu\'elle aura été traitée.',
+            ], Response::HTTP_CONFLICT);
+        }
 
         event(new DemandeResidenceSoumise($demande));
 

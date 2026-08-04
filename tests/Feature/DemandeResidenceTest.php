@@ -6,6 +6,7 @@ use App\Models\Abonnement;
 use App\Models\DemandeResidence;
 use App\Models\Resident;
 use App\Models\User;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Laravel\Sanctum\Sanctum;
@@ -183,4 +184,32 @@ test('après un refus, une nouvelle demande est possible', function () {
     ])->assertCreated();
 
     expect(DemandeResidence::where('user_id', $client->id)->count())->toBe(2);
+});
+
+test('la base garantit une seule demande ouverte par utilisateur [anti-course]', function () {
+    $client = User::factory()->client()->create();
+
+    DemandeResidence::factory()->create([
+        'user_id' => $client->id,
+        'statut' => DemandeResidenceEnum::EN_COURS->value,
+    ]);
+
+    // Le contrôleur refuse déjà ce cas ; l'index ferme la fenêtre entre sa
+    // vérification et l'insertion, quand deux requêtes arrivent ensemble.
+    expect(fn () => DemandeResidence::factory()->create([
+        'user_id' => $client->id,
+        'statut' => DemandeResidenceEnum::ACCEPTEE->value,
+    ]))->toThrow(UniqueConstraintViolationException::class);
+});
+
+test('la base autorise plusieurs demandes refusées', function () {
+    $client = User::factory()->client()->create();
+
+    // Redéposer après un refus doit rester possible, autant de fois qu'il faut.
+    DemandeResidence::factory()->count(3)->create([
+        'user_id' => $client->id,
+        'statut' => DemandeResidenceEnum::REFUSEE->value,
+    ]);
+
+    expect(DemandeResidence::where('user_id', $client->id)->count())->toBe(3);
 });
